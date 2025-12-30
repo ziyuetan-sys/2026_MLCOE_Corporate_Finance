@@ -1,9 +1,10 @@
 import pytest
 import tensorflow as tf
 import numpy as np
-from dynamic.networks import BellmanNet_FOC
-from dynamic.trainer import BellmanTrainer  
-from dynamic.models import BasicModel
+from dynamic_model.networks import BellmanNet_FOC
+from dynamic_model.trainer import BellmanTrainer  
+from dynamic_model.Basic import BasicModel
+
 
 
 

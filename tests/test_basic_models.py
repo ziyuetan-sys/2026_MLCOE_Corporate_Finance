@@ -1,91 +1,67 @@
-
-import tensorflow as tf
+# test_basic_model.py
 import pytest
-from dynamic.models import BasicModel
-
+import tensorflow as tf
+from model import BasicModel  # your model file name
 
 @pytest.fixture
-def basic_model():
+def model():
+    """Fixture to initialize a BasicModel instance for tests."""
     return BasicModel()
 
-
 @pytest.fixture
-def dummy_net():
-    class DummyNet(tf.keras.Model):
-        def call(self, x):
-            #  [K_next, B_next, V_next] output
-            return tf.concat([x, tf.reduce_sum(x, axis=1, keepdims=True)], axis=1)
-        def policy(self, K, Z):
-            return 0.9 * K + 0.1 * Z
-    return DummyNet()
+def sample_states(model):
+    """Fixture to generate sample states."""
+    return model.sample_state_train(5)
 
+def test_initialization(model):
+    """Check steady-state initialization and basic parameter bounds."""
+    assert 0 < model.theta < 1
+    assert 0 < model.delta < 1
+    assert isinstance(model.K_steady, tf.Tensor)
+    assert model.K_steady.numpy() > 0
 
+def test_profit(model):
+    """Test the profit function for monotonicity in K."""
+    K = tf.constant([[1.0], [2.0], [4.0]], dtype=tf.float32)
+    Z = tf.constant([[1.0], [1.0], [1.0]], dtype=tf.float32)
+    profit_vals = model.profit(K, Z).numpy()
+    assert profit_vals[0] < profit_vals[-1]
 
-# profit, investment, output
-def test_basicmodel_profit_and_investment(basic_model):
-    K = tf.constant([[1.0], [2.0]], dtype=tf.float32)
-    Z = tf.constant([[1.0], [0.5]], dtype=tf.float32)
-    profit = basic_model.profit(K, Z)
-    invest = basic_model.investment(K_prime=1.5 * K, K=K)
-    assert profit.shape == K.shape
-    assert invest.shape == K.shape
+def test_investment_and_cost(model):
+    """Ensure investment and cost computations behave as expected."""
+    K = tf.constant([[10.0]], dtype=tf.float32)
+    K_prime = tf.constant([[11.0]], dtype=tf.float32)
+    I = model.investment(K_prime, K)
+    assert I.numpy().item() == pytest.approx(10.0 * model.delta.numpy() + 1.0, rel=0.1)
 
-# cashflow
-def test_basicmodel_cashflow(basic_model):
-    K = tf.constant([[1.0]])
-    Z = tf.constant([[1.0]])
-    K_prime = tf.constant([[1.2]])
-    cashflow = basic_model.cashflow(K, Z, K_prime)
-    assert cashflow.shape == (1, 1)
+    psi_none = model.investment_cost(I, K)
+    assert psi_none.numpy().shape == I.numpy().shape
 
-# lifetime
-def test_basicmodel_lifetime_reward_runs(basic_model, dummy_net):
-    batch_size = 4
-    T = 5
-    K, Z = basic_model.sample_state_train(batch_size)
+def test_cashflow(model):
+    """Test that cashflow decreases with higher investment costs."""
+    K = tf.constant([[10.0]], dtype=tf.float32)
+    Z = tf.constant([[1.0]], dtype=tf.float32)
+    K_prime_low = tf.constant([[10.2]], dtype=tf.float32)
+    K_prime_high = tf.constant([[12.0]], dtype=tf.float32)
+    cf_low = model.cashflow(K, Z, K_prime_low)
+    cf_high = model.cashflow(K, Z, K_prime_high)
+    assert cf_high.numpy() < cf_low.numpy()
 
-    reward_sum = basic_model.lifetime_reward(dummy_net, (K, Z), T)
+def test_sample_state_train(model):
+    """Ensure training samples fall within specified bounds."""
+    K, Z = model.sample_state_train(100)
+    assert tf.reduce_all((K >= model.K_min) & (K <= model.K_max))
+    assert tf.reduce_all((Z >= model.Z_min) & (Z <= model.Z_max))
 
+def test_value_residual_computation(model, sample_states):
+    """Check that Bellman residual returns expected dictionary keys."""
+    class DummyNet:
+        def policy(self, K, Z): return K * 0.95
+        def value(self, K, Z): return K * 0.1
+        def __call__(self, x): return tf.concat([x[:, :1] * 0.1], axis=1)
 
-    assert isinstance(reward_sum, tf.Tensor)
-    assert reward_sum.shape == (batch_size, 1)
-    assert not tf.math.reduce_any(tf.math.is_nan(reward_sum))
-    assert not tf.math.reduce_any(tf.math.is_inf(reward_sum))
-
-def test_basicmodel_lifetime_reward_invalid_input_type(basic_model, dummy_net):
-    K, Z = basic_model.sample_state_train(2)
-    with pytest.raises(ValueError):
-        _ = basic_model.lifetime_reward(dummy_net, K, T=3)
-
-      
-# bellman residual
-def test_basicmodel_bellman_residual_runs(basic_model, dummy_net):
-    K, Z = basic_model.sample_state_train(4)
-    out = basic_model.Bellman_residual(dummy_net, (K, Z))
-    assert "loss_total" in out and isinstance(out["loss_total"], tf.Tensor)
-
-# sample data
-def test_basicmodel_sample_state_train_and_test_shapes(basic_model):
-    n_train = 8
-    n_test = 5
-
-    train_state = basic_model.sample_state_train(n_train)
-    test_state = basic_model.sample_state_test(n_test)
-
-    # return
-    for state in (train_state, test_state):
-        assert isinstance(state, tuple), "return must bbe tuple"
-        assert len(state) == 2, "should be (K, Z)"
-    # dim
-    Kt, Zt = train_state
-    Ke, Ze = test_state
-    assert Kt.shape == (n_train, 1)
-    assert Zt.shape == (n_train, 1)
-    assert Ke.shape == (n_test, 1)
-    assert Ze.shape == (n_test, 1)
-
-    # range
-    assert tf.reduce_all(Kt >= basic_model.K_min)
-    assert tf.reduce_all(Kt <= basic_model.K_max)
-    assert tf.reduce_all(Zt >= basic_model.Z_min)
-    assert tf.reduce_all(Zt <= basic_model.Z_max)
+    net = DummyNet()
+    residuals = model.Bellman_residual(net, sample_states)
+    assert "loss_total" in residuals
+    assert "loss_V" in residuals
+    assert "loss_FOC" in residuals

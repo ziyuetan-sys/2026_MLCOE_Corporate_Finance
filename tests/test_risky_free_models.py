@@ -1,7 +1,7 @@
 
 import tensorflow as tf
 import pytest
-from dynamic.models import RiskFree
+from dynamic_model.models import RiskFree
 
 @pytest.fixture
 def riskfree_model():

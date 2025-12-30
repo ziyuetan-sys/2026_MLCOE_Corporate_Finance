@@ -1,7 +1,7 @@
 
 import pytest
 import tensorflow as tf
-from dynamic.networks import BellmanNet_FOC
+from dynamic_model.networks import BellmanNet_FOC
 
 
 
