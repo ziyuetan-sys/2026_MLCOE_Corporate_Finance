@@ -1,8 +1,8 @@
 import pytest
 import tensorflow as tf
 import numpy as np
-from dynamic_model.networks import BellmanNet_FOC
-from dynamic_model.trainer import BellmanTrainer  
+from finance.dynamic.dynamic_model.Networks import BellmanNet_FOC
+from finance.dynamic.dynamic_model.Trainer import BellmanTrainer  
 from dynamic_model.Basic import BasicModel
 
 

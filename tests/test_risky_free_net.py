@@ -1,6 +1,6 @@
 import pytest
 import tensorflow as tf
-from dynamic_model.networks import BellmanNet_RiskyFree
+from finance.dynamic.dynamic_model.Networks import BellmanNet_RiskyFree
 
 
 @pytest.fixture

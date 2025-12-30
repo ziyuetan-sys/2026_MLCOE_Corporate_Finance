@@ -1,7 +1,7 @@
 
 import pytest
 import tensorflow as tf
-from dynamic_model.networks import BellmanNet_FOC
+from finance.dynamic.dynamic_model.Networks import BellmanNet_FOC
 
 
 
