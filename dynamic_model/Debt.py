@@ -328,19 +328,19 @@ class RiskFree(tf.Module):
         """
         Samples states (K, B, Z) around the steady state for testing.
         """
-        # K: 稳态附近的扰动
+      
         K_eval = self.K_steady * (1.0 + tf.random.normal(
             (test_size, 1), mean=0.0, stddev=0.1
         ))
         K_eval = tf.clip_by_value(K_eval, self.K_min, self.K_max)
 
-        # B: 0附近的扰动 (假设稳态B接近0或某个常数)
+     
         B_eval = (1.0 + tf.random.normal(
             (test_size, 1), mean=0.0, stddev=0.5
         ))
         B_eval = tf.clip_by_value(B_eval, self.B_min, self.B_max)
     
-        # Z: 对数正态分布扰动
+    
         Z_eval = tf.exp(tf.random.normal(
             (test_size, 1), mean=0.0, stddev=self.std_z
         ))
