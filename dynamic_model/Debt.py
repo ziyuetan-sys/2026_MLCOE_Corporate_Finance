@@ -1,10 +1,9 @@
 import tensorflow as tf
 from typing import Tuple, Union, List, Dict, Any
 
-# Define a Protocol or Dummy class for the Network to ensure type safety
-# In a real scenario, this would be your actual Keras Model class.
+
 class EconomicNetwork(tf.keras.Model):
-    """Interface for networks used by RiskFree / RiskDebt models."""
+  
 
     def policy(self, K, B, Z):
         raise NotImplementedError("policy() must be implemented by subclass.")

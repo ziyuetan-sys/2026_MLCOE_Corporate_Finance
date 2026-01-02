@@ -137,7 +137,7 @@ class BellmanTrainer:
             progress.set_postfix({k: f"{v:.4e}" for k, v in loss_float_dict.items()})
 
             
-            # ---- Periodic evaluation ----
+            #  Periodic evaluation
             lifetime_reward = None
             if eval and (epoch % eval_interval == 0 or epoch == 1):
                 lifetime_reward = self.evaluate(self.test_data)
@@ -167,7 +167,7 @@ class BellmanTrainer:
                         self.net.set_weights(self.best_weights)
                         break
 
-            # ---- Display progress ----
+            #  Display progress
             if epoch % display_step == 0 or epoch == 1:
                 loss_str = " | ".join([f"{k}={v:.6e}" for k, v in loss_float_dict.items()])
                 tf.print(f"Epoch {epoch:>5} | {loss_str}")
