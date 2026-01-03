@@ -81,6 +81,8 @@ class BasicModel(tf.Module):
     # Model function
     @tf.function
     def profit(self, K: tf.Tensor, Z: tf.Tensor) -> tf.Tensor:
+        K = tf.reshape(K, (-1, 1))
+        Z = tf.reshape(Z, (-1, 1))
         """Computes production profit: pi(k, z) = z * k^theta."""
         return Z * tf.pow(K, self.theta)
 
@@ -88,6 +90,8 @@ class BasicModel(tf.Module):
     @tf.function
     def investment(self, K_prime: tf.Tensor, K: tf.Tensor) -> tf.Tensor:
         """Computes investment required to reach K_prime from K: I = K' - (1-delta)K."""
+        K_prime = tf.reshape(K_prime, (-1, 1))
+        K = tf.reshape(K, (-1, 1))
         return K_prime - (1.0 - self.delta) * K
 
     @tf.function
@@ -98,6 +102,9 @@ class BasicModel(tf.Module):
         Returns:
             tf.Tensor: The calculated cost.
         """
+        I = tf.reshape(I, (-1, 1))
+        K = tf.reshape(K, (-1, 1))
+        
         if self.cost_mode == "None":
             # Return zeros maintaining the shape of input I
             return tf.zeros_like(I) * (I + K)
@@ -116,6 +123,9 @@ class BasicModel(tf.Module):
     @tf.function
     def cashflow(self, K: tf.Tensor, Z: tf.Tensor, K_prime: tf.Tensor) -> tf.Tensor:
         """Computes current period utility/cashflow: Profit - Cost - Investment."""
+        K = tf.reshape(K, (-1, 1))
+        Z = tf.reshape(Z, (-1, 1))
+        K_prime = tf.reshape(K_prime, (-1, 1))
         Pi = self.profit(K, Z)
         I = self.investment(K_prime, K)
         psi = self.investment_cost(I, K)
@@ -135,7 +145,12 @@ class BasicModel(tf.Module):
         """
         if not isinstance(cur_state, (tuple, list)):
             raise ValueError("Current state must be tuple or list")
+        
         K_t, Z_t = cur_state
+      
+        K_t = tf.reshape(K_t, (-1, 1))
+        Z_t = tf.reshape(Z_t, (-1, 1))
+        
         K_steady = self.K_steady
         N = tf.shape(K_t)[0]
         reward_sum = tf.zeros((N,1), dtype=tf.float32)
@@ -295,9 +310,8 @@ class BasicModel(tf.Module):
 
     def sample_state_test(self, test_size: int) -> Tuple[tf.Tensor, tf.Tensor]:
         """Samples states near steady state for testing/evaluation."""
-        K_eval = self.K_steady * (1.0 + tf.random.normal((test_size, 1), mean=0.0, stddev=0.1))
-        K_eval = tf.clip_by_value(K_eval, self.K_min, self.K_max)
-        
+        K_eval = tf.random.uniform((test_size, 1), minval=self.K_min, maxval=self.K_max, dtype=tf.float32)
+      
         Z_eval = tf.exp(tf.random.normal((test_size, 1), mean=0.0, stddev=self.std_z))
         Z_eval = tf.clip_by_value(Z_eval, self.Z_min, self.Z_max)
         return (K_eval, Z_eval)

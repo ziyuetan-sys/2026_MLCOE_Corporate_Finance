@@ -58,11 +58,12 @@ class BellmanTrainer:
         self.test_data = self._validate_data(test_data, "test_data")
 
         if train_data is not None and test_data is not None:
-            if len(train_data) != len(test_data):
-                raise ValueError(
-                    f"train_data and test_data must have the same length, "
-                    f"got {len(train_data)} and {len(test_data)}"
-                )
+             for i, (train_tensor, test_tensor) in enumerate(zip(train_data, test_data)):
+                if train_tensor.shape[1:] != test_tensor.shape[1:]:
+                    raise ValueError(
+                        f"train_data[{i}] and test_data[{i}] must have matching feature dimensions, "
+                        f"got {train_tensor.shape} vs {test_tensor.shape}"
+                    )
 
     @staticmethod
     def _validate_data(data, name: str):
@@ -140,7 +141,7 @@ class BellmanTrainer:
             #  Periodic evaluation
             lifetime_reward = None
             if eval and (epoch % eval_interval == 0 or epoch == 1):
-                lifetime_reward = self.evaluate(self.test_data)
+                lifetime_reward = self.evaluate(self.test_data)["reward_mean"]
                 self.eval_epochs.append(epoch)
                 self.eval_lifetime_reward.append(lifetime_reward)
 
@@ -192,4 +193,5 @@ class BellmanTrainer:
         reward = tf.stop_gradient(
             self.model.lifetime_reward(self.net, test_data, T=200)
         )
-        return float(tf.reduce_mean(reward))
+        reward_mean = float(tf.reduce_mean(reward))
+        return {"reward_mean": reward_mean}
