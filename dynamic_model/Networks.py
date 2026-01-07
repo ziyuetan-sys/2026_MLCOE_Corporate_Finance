@@ -73,12 +73,12 @@ class BellmanNet_RiskyFree(Model):
         self.input_norm = layers.LayerNormalization(axis=-1)
         self.kp1, self.kp2, self.kp_out = dense_layer(hidden_dim, activation)
         self.bp1, self.bp2, self.bp_out = dense_layer(hidden_dim, activation)
-        self.l1, self.l2, self.l_out = dense_layer(hidden_dim, activation)
+        #self.l1, self.l2, self.l_out = dense_layer(hidden_dim, activation)
         self.v1, self.v2, self.v_out = dense_layer(hidden_dim, activation)
 
     def initialize_weights(self):
-        hidden_layers = [self.kp1, self.kp2, self.bp1, self.bp2, self.l1, self.l2, self.v1, self.v2]
-        outputs = [self.kp_out, self.bp_out, self.l_out, self.v_out]
+        hidden_layers = [self.kp1, self.kp2, self.bp1, self.bp2, self.v1, self.v2]
+        outputs = [self.kp_out, self.bp_out, self.v_out]
         init_all_layers(self, hidden_layers, outputs)
 
     def call(self, inputs):
@@ -88,14 +88,14 @@ class BellmanNet_RiskyFree(Model):
         Kp = tf.nn.softplus(self.kp_out(self.kp2(self.kp1(self.input_norm(K)))))
         B_min, B_max = self.model.B_min, self.model.collateral_constraint(Kp)
         Bp = B_min + tf.nn.sigmoid(self.bp_out(self.bp2(self.bp1(inputs)))) * (B_max - B_min)
-        Lam = tf.nn.softplus(self.l_out(self.l2(self.l1(inputs))))
+        #Lam = tf.nn.softplus(self.l_out(self.l2(self.l1(inputs))))
         V = self.v_out(self.v2(self.v1(inputs)))
 
-        return tf.concat([Kp, Bp, Lam, V], axis=1)
+        return tf.concat([Kp, Bp, V], axis=1)
 
     def policy(self, K, B, Z): out = self(tf.concat([K, B, Z], 1)); return out[:, :1], out[:, 1:2]
-    def multiplier(self, K, B, Z): return self(tf.concat([K, B, Z], 1))[:, 2:3]
-    def value(self, K, B, Z): return self(tf.concat([K, B, Z], 1))[:, 3:4]
+    #def multiplier(self, K, B, Z): return self(tf.concat([K, B, Z], 1))[:, 2:3]
+    def value(self, K, B, Z): return self(tf.concat([K, B, Z], 1))[:, 2:3]
 
 
 class BellmanNet_RiskDebt(Model):

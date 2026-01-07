@@ -218,12 +218,9 @@ class RiskFree(tf.Module):
         
         with tf.GradientTape() as tapeV:
             tapeV.watch([K_prime, B_prime])
-            # Assuming net returns [policy_K, policy_B, multiplier, Value]
-            # Adjust index 3 based on your actual network architecture
-            out = net(tf.concat([K_prime, B_prime, Z_next], axis=1))[:, 3:4]
-            
-        dVnext_dKp, dVnext_dBp = tapeV.gradient(out, [K_prime, B_prime])
-        V_next = out
+            V_next = net.value(K_prime, B_prime, Z_next)
+          
+        dVnext_dKp, dVnext_dBp = tapeV.gradient(V_next, [K_prime, B_prime])
         
         return V_next, dVnext_dKp, dVnext_dBp
 
@@ -240,7 +237,6 @@ class RiskFree(tf.Module):
         
         # 1. Current Policy and Value
         K_prime, B_prime = net.policy(K, B, Z)
-        Lam = net.multiplier(K, B, Z)
         V_now = net.value(K, B, Z)
 
         # 2. Current Reward Gradients
@@ -267,43 +263,46 @@ class RiskFree(tf.Module):
         res_FOC_K_1 = dR_dKp + self.beta * dVnext_dKp1
         res_FOC_K_2 = dR_dKp + self.beta * dVnext_dKp2
 
-        # Multiplier Residual
-        res_FOC_lam_1 = self._lam_residual(Lam, dR_dBp, dVnext_dBp1)
-        res_FOC_lam_2 = self._lam_residual(Lam, dR_dBp, dVnext_dBp2)
+        # Compute multiplier lam
+        lam_1 = dR_dBp + self.beta * dVnext_dBp1
+        lam_2 = dR_dBp + self.beta * dVnext_dBp2
 
+        # slack for FB residual
+        slack = self.collateral_constraint(K_prime) - B_prime
         # Fisher-Burmeister Residual (Constraints)
-        res_FB = self._fb_residual(K_prime, B_prime, Lam)
+        res_FB_1 = self._fb_residual(slack, lam_1)
+        res_FB_2 = self._fb_residual(slack, lam_2)
 
         # 5. Combine Losses (Product of residuals approach)
         residual_V = res_V_1 * res_V_2
         residual_FOC_K = res_FOC_K_1 * res_FOC_K_2
-        residual_FOC_lam = res_FOC_lam_1 * res_FOC_lam_2
+        residual_FB = res_FB_1 * res_FB_2
 
         loss_total = tf.reduce_mean(
             residual_V + 
             nu_K * residual_FOC_K + 
-            nu_lam * residual_FOC_lam + 
-            nu_FB * res_FB
+            nu_FB * residual_FB
         )
 
         return {
             "loss_total": loss_total,
             "loss_V": tf.reduce_mean(tf.abs(residual_V)),
             "loss_FOC_K": tf.reduce_mean(tf.abs(residual_FOC_K)),
-            "loss_FB": tf.reduce_mean(tf.abs(res_FB)),
+            "loss_FB": tf.reduce_mean(tf.abs(residual_FB)),
         }
 
-    def _fb_residual(self, K_prime, B_prime, Lam):
-        """Fisher-Burmeister residual for complementarity conditions."""
-        g = self.collateral_constraint(K_prime) - B_prime
+    def _fb_residual(self, slack: tf.Tensor, lam: tf.Tensor):
+        """
+        Fisher-Burmeister residual for complementarity conditions.
+        FB(a,b) = a + b - sqrt(a^2 + b^2) = 0 <=> a>=0, b>=0, ab=0
+        Here: a = lam, b = slack = RHS - B' >= 0.
+        """
+        #g = self.collateral_constraint(K_prime) - B_prime
         # FB(a,b) = a + b - sqrt(a^2 + b^2) = 0 <=> a>=0, b>=0, ab=0
-        fb_val = g + Lam - tf.sqrt(tf.square(g) + tf.square(Lam) + 1e-8) # Added epsilon for stability
-        return tf.square(fb_val)
+        #fb_val = g + Lam - tf.sqrt(tf.square(g) + tf.square(Lam) + 1e-8) # Added epsilon for stability
+        fb_val = slack + lam - tf.sqrt(tf.square(slack) + tf.square(lam) + 1e-8) # Added epsilon for stability
+        return fb_val
 
-    def _lam_residual(self, lam, dR_dBP, dVnext_dBP):
-        """Target residual for Lambda based on FOC w.r.t Debt."""
-        lam_target = - (dR_dBP + self.beta * dVnext_dBP)
-        return lam - lam_target
 
     def sample_state_train(self, batch_size: int) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
         """
@@ -396,6 +395,7 @@ class RiskDebt(RiskFree):
         Z_flat  = tf.reshape(Z_next, (-1, 1))                    # (N*N_mc, 1)
         
         V_next = net.value(Kp_flat, bp_flat, Z_flat)
+    
         R_values = self.recovery_value(Kp_flat, Z_flat)
 
         V_next = tf.reshape(V_next, (N, N_mc))
@@ -447,6 +447,7 @@ class RiskDebt(RiskFree):
 
         Kp, Bp = net.policy(K, B, Z)
         V_now = net.value(K, B, Z)
+        V_now = tf.maximum(V_now, 0.0)
 
         with tf.GradientTape() as tape_R:
             tape_R.watch([Kp, Bp])
@@ -470,6 +471,7 @@ class RiskDebt(RiskFree):
             Z_next = tf.clip_by_value(Z_next, self.Z_min, self.Z_max)
 
             V_next = net.value(Kp_eff, Bp_eff, Z_next)
+            V_next = tf.maximum(V_next, 0.0)
             with tf.GradientTape() as tapeV:
                 tapeV.watch([Kp_eff, Bp_eff])
                 out = net(tf.concat([Kp_eff, Bp_eff, Z_next], axis=1))[:, 2:3]
